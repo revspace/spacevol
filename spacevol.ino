@@ -12,7 +12,8 @@ const int lamppin = 17;
 WiFiClient wificlient;
 MQTTClient mqtt;
 
-String  topic;
+String  current_topic;
+String  max_n_topic;
 int     max_n, n;
 bool    blink;
 int     blink_ontime, blink_offtime;
@@ -31,10 +32,12 @@ void setup() {
         "MQTT Server hostname");
     int port      = WiFiSettings.integer( "mqtt_port", 0, 65535, 1883,
         "MQTT Server port");
-    topic         = WiFiSettings.string(  "sv_mqtt_topic", "revspace/doorduino/checked-in",
-        "MQTT topic");
+    current_topic = WiFiSettings.string(  "sv_mqtt_topic", "revspace/doorduino/checked-in",
+        "MQTT topic for current value");
+    max_n_topic   = WiFiSettings.string(  "sv_mqtt_topic_max", "revspace/n_max",
+        "MQTT topic for threshold");
     max_n         = WiFiSettings.integer( "sv_max_n", 10,
-        "Threshold");
+        "Startup threshold");
     blink         = WiFiSettings.checkbox("sv_blink", true,
         "Blink instead of steady");
     blink_ontime  = WiFiSettings.integer( "sv_blink_ontime", 3000,
@@ -55,8 +58,15 @@ void setup() {
 
     mqtt.begin(server.c_str(), port, wificlient);
     mqtt.onMessage([](String &topic, String &payload) {
-        n = payload.toInt();
-        Serial.println(n);
+        int i = payload.toInt();
+
+        if (topic == current_topic) {
+            n = i;
+        }
+        if (topic == max_n_topic) {
+            max_n = i;
+        }
+        Serial.printf("%d/%d\n", n, max_n);
     });
 }
 
@@ -66,8 +76,10 @@ void loop() {
     while (!mqtt.connected()) {
         Serial.println("Connecting to MQTT");
         if (mqtt.connect("")) {
-            Serial.printf("Subscribing to %s\n", topic.c_str());
-            mqtt.subscribe(topic);
+            Serial.printf("Subscribing to %s\n", current_topic.c_str());
+            mqtt.subscribe(current_topic);
+            Serial.printf("Subscribing to %s\n", max_n_topic.c_str());
+            mqtt.subscribe(max_n_topic);
             break;
         }
         if (attempt++ > 60) ESP.restart();
